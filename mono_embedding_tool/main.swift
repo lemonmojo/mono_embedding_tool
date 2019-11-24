@@ -9,6 +9,11 @@
 import Foundation
 
 extension String {
+    func lastPathComponent() -> String {
+        let nsStr = self as NSString
+        return nsStr.lastPathComponent
+    }
+    
     func appendingPathComponent(path: String) -> String {
         let nsStr = self as NSString
         return nsStr.appendingPathComponent(path)
@@ -168,6 +173,35 @@ class MonoCopier {
     let relativeFilePathsToCopy: [String]
     let outputPath: String
     
+    let infoPlistContent = """
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleExecutable</key>
+    <string>Versions/Current/lib/libmonosgen-2.0.dylib</string>
+    <key>CFBundleIdentifier</key>
+    <string>com.lemonmojo.Mono</string>
+    <key>CFBundleInfoDictionaryVersion</key>
+    <string>6.0</string>
+    <key>CFBundleName</key>
+    <string>Mono</string>
+    <key>CFBundlePackageType</key>
+    <string>FMWK</string>
+    <key>CFBundleShortVersionString</key>
+    <string>1.0</string>
+    <key>CFBundleSupportedPlatforms</key>
+    <array>
+        <string>MacOSX</string>
+    </array>
+    <key>CFBundleVersion</key>
+    <string>1</string>
+    <key>NSHumanReadableCopyright</key>
+    <string>Copyright © 2019 Felix Deimel. All rights reserved.</string>
+</dict>
+</plist>
+"""
+    
     init(systemMonoPath: String, relativeFilePathsToCopy: [String], outputPath: String) {
         self.systemMonoPath = systemMonoPath
         self.relativeFilePathsToCopy = relativeFilePathsToCopy
@@ -195,15 +229,48 @@ class MonoCopier {
             return false
         }
         
-        let outputCurrentVersionPath = self.outputPath.appendingPathComponent(path: "Versions").appendingPathComponent(path: "Current")
+        let outputVersionAPath = self.outputPath.appendingPathComponent(path: "Versions").appendingPathComponent(path: "A")
         
         do {
-            try fileManager.createDirectory(atPath: outputCurrentVersionPath, withIntermediateDirectories: true, attributes: nil)
+            try fileManager.createDirectory(atPath: outputVersionAPath, withIntermediateDirectories: true, attributes: nil)
         } catch {
-            ConsoleIO.printMessage("Failed to create current version directory", to: .error)
+            ConsoleIO.printMessage("Failed to create Versions/A directory", to: .error)
             
             return false
         }
+        
+        let outputVersionAResourcesPath = outputVersionAPath.appendingPathComponent(path: "Resources")
+        
+        do {
+            try fileManager.createDirectory(atPath: outputVersionAResourcesPath, withIntermediateDirectories: true, attributes: nil)
+        } catch {
+            ConsoleIO.printMessage("Failed to create Versions/A/Resources directory", to: .error)
+            
+            return false
+        }
+        
+        let infoPlistPath = outputVersionAResourcesPath.appendingPathComponent(path: "Info.plist")
+        
+        do {
+            try self.infoPlistContent.write(toFile: infoPlistPath, atomically: true, encoding: .utf8)
+        } catch {
+            ConsoleIO.printMessage("Failed to create Info.plist in Resources directory", to: .error)
+            
+            return false
+        }
+        
+        let outputResourcesPath = self.outputPath.appendingPathComponent(path: "Resources")
+        let versionsCurrentResourcesRelativePath = "Versions/Current/Resources"
+        
+        do {
+            try fileManager.createSymbolicLink(atPath: outputResourcesPath, withDestinationPath: versionsCurrentResourcesRelativePath)
+        } catch {
+            ConsoleIO.printMessage("Failed create symlink for \(versionsCurrentResourcesRelativePath) at \(outputResourcesPath)", to: .error)
+            
+            return false
+        }
+        
+        let libPath = outputVersionAPath.appendingPathComponent(path: "lib")
         
         for relativeFilePath in self.relativeFilePathsToCopy {
             let absoluteFilePath = self.systemMonoPath.appendingPathComponent(path: relativeFilePath)
@@ -211,7 +278,34 @@ class MonoCopier {
             
             ConsoleIO.printMessage("Going to copy \(resolvedAbsoluteFilePath)...")
             
-            let absoluteDestinationPath = outputCurrentVersionPath.appendingPathComponent(path: relativeFilePath)
+            if relativeFilePath.isDLLFile() { // Put symlinks for all DLLs into lib root folder
+                let dllFileName = relativeFilePath.lastPathComponent()
+                let symlinkPath = libPath.appendingPathComponent(path: dllFileName)
+                
+                var symlinkDestinationPath = relativeFilePath
+                
+                if relativeFilePath.starts(with: "/lib/") {
+                    symlinkDestinationPath = String(relativeFilePath[relativeFilePath.range(of: "/lib/")!.upperBound...])
+                }
+                
+                do {
+                    try fileManager.createSymbolicLink(atPath: symlinkPath, withDestinationPath: symlinkDestinationPath)
+                } catch {
+                    ConsoleIO.printMessage("Failed create symlink for \(relativeFilePath) at \(symlinkPath)", to: .error)
+                    
+                    return false
+                }
+            }
+            
+            let absoluteDestinationPath = outputVersionAPath.appendingPathComponent(path: relativeFilePath)
+            
+            /* let rangeOfSystemMonoPath = resolvedAbsoluteFilePath.range(of: self.systemMonoPath.resolvingSylinksInPath())
+            
+            if let rangeOfSystemMonoPath = rangeOfSystemMonoPath {
+                let newRelativeFilePath = String(resolvedAbsoluteFilePath[rangeOfSystemMonoPath.upperBound...])
+                
+                absoluteDestinationPath = outputVersionAPath.appendingPathComponent(path: newRelativeFilePath)
+            } */
             
             let absoluteDestinationDirectoryPath = absoluteDestinationPath.deletingLastPathComponent()
             
@@ -240,8 +334,6 @@ class MonoCopier {
             }
         }
         
-        let libPath = outputCurrentVersionPath.appendingPathComponent(path: "/lib")
-        
         let libmonosgenFilename = "libmonosgen-2.0.dylib"
         let libmonosgenPath = libPath.appendingPathComponent(path: libmonosgenFilename)
         
@@ -258,17 +350,50 @@ class MonoCopier {
         
         let libMonoNativeCompatFilename = "libmono-native-compat.0.dylib"
         let libMonoNativeCompatPath = libPath.appendingPathComponent(path: libMonoNativeCompatFilename)
+        let libSystemNativeFilename = "libSystem.Native.dylib"
+        let libSystemNativePath = libPath.appendingPathComponent(path: "mono").appendingPathComponent(path: "4.5").appendingPathComponent(path: libSystemNativeFilename)
         
-        if !changeDylibID(of: libMonoNativeCompatPath, to: newDylibID(for: libMonoNativeCompatFilename)) {
+        do {
+            try fileManager.moveItem(atPath: libMonoNativeCompatPath, toPath: libSystemNativePath)
+        } catch {
+            ConsoleIO.printMessage("Failed to rename \(libMonoNativeCompatFilename) to \(libSystemNativeFilename)", to: .error)
+            
             return false
         }
         
-        let mainFrameworkSymlinkPath = self.outputPath.appendingPathComponent(path: "Mono")
+        if !changeDylibID(of: libSystemNativePath, to: newDylibID(for: libSystemNativeFilename)) {
+            return false
+        }
+        
+        let outputVersionCurrentPath = self.outputPath.appendingPathComponent(path: "Versions").appendingPathComponent(path: "Current")
+        let versionARelativePath = "A";
         
         do {
-            try fileManager.createSymbolicLink(atPath: mainFrameworkSymlinkPath, withDestinationPath: libmonosgenPath)
+            try fileManager.createSymbolicLink(atPath: outputVersionCurrentPath, withDestinationPath: versionARelativePath)
         } catch {
-            ConsoleIO.printMessage("Failed create symlink for \(libmonosgenPath) at \(mainFrameworkSymlinkPath)", to: .error)
+            ConsoleIO.printMessage("Failed create symlink for \(versionARelativePath) at \(outputVersionCurrentPath)", to: .error)
+            
+            return false
+        }
+        
+        /* let mainFrameworkSymlinkPath = self.outputPath.appendingPathComponent(path: "Mono")
+        let libmonosgenInCurrentVersionPath = "Versions".appendingPathComponent(path: "Current").appendingPathComponent(path: "lib").appendingPathComponent(path: libmonosgenFilename)
+        
+        do {
+            try fileManager.createSymbolicLink(atPath: mainFrameworkSymlinkPath, withDestinationPath: libmonosgenInCurrentVersionPath)
+        } catch {
+            ConsoleIO.printMessage("Failed create symlink for \(libmonosgenInCurrentVersionPath) at \(mainFrameworkSymlinkPath)", to: .error)
+            
+            return false
+        } */
+        
+        let mainFrameworkSymlinkInVersionAPath = outputVersionAPath.appendingPathComponent(path: "Mono")
+        let libmonosgenInLibPath = "lib".appendingPathComponent(path: libmonosgenFilename)
+        
+        do {
+            try fileManager.createSymbolicLink(atPath: mainFrameworkSymlinkInVersionAPath, withDestinationPath: libmonosgenInLibPath)
+        } catch {
+            ConsoleIO.printMessage("Failed create symlink for \(libmonosgenInLibPath) at \(mainFrameworkSymlinkInVersionAPath)", to: .error)
             
             return false
         }
