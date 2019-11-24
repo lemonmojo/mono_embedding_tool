@@ -52,11 +52,11 @@
       </BuildableProductRunnable>
       <CommandLineArguments>
          <CommandLineArgument
-            argument = "/Library/Frameworks/Mono.framework/Versions/Current"
+            argument = "/Library/Frameworks/Mono.framework"
             isEnabled = "YES">
          </CommandLineArgument>
          <CommandLineArgument
-            argument = "~/Downloads/Mono.framework"
+            argument = "~/Downloads"
             isEnabled = "YES">
          </CommandLineArgument>
       </CommandLineArguments>

@@ -493,8 +493,8 @@ class MonoCopier {
     }
 }
 
-let systemMonoPath = CommandLine.arguments[1].expandingTildeInPath()
-let outputPath = CommandLine.arguments[2].expandingTildeInPath()
+let systemMonoPath = CommandLine.arguments[1].expandingTildeInPath().appendingPathComponent(path: "Versions").appendingPathComponent(path: "Current")
+let outputPath = CommandLine.arguments[2].expandingTildeInPath().appendingPathComponent(path: "Mono.framework")
 
 let fileCollector = FileCollector(systemMonoPath: systemMonoPath)
 
