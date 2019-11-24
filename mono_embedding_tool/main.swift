@@ -368,12 +368,14 @@ class MonoCopier {
     }
 }
 
-let systemMonoPath = "/Library/Frameworks/Mono.framework/Versions/Current".expandingTildeInPath()
-let outputPath = "~/Downloads/Mono.framework".expandingTildeInPath()
+let systemMonoPath = CommandLine.arguments[1].expandingTildeInPath()
+let outputPath = CommandLine.arguments[2].expandingTildeInPath()
 
 let fileCollector = FileCollector(systemMonoPath: systemMonoPath)
 
 fileCollector.blacklistedFilenames = [
+    "Accessibility.dll",
+    "Commons.Xml.Relaxng.dll",
     "Microsoft.Visual",
     "Microsoft.Build",
     "Mono",
@@ -404,11 +406,11 @@ let monoCopier = MonoCopier(systemMonoPath: systemMonoPath,
 
 let success = monoCopier.copy()
 
-let finalOutputPath = outputPath.abbreviatingWithTildeInPath()
+let outputPathForDisplay = outputPath.abbreviatingWithTildeInPath()
 
 if success {
-    ConsoleIO.printMessage("Successfully created embeddable Mono framework at \(finalOutputPath)")
+    ConsoleIO.printMessage("Successfully created embeddable Mono framework at \(outputPathForDisplay)")
 } else {
-    ConsoleIO.printMessage("Failed to create embeddable Mono framework at \(finalOutputPath)", to: .error)
+    ConsoleIO.printMessage("Failed to create embeddable Mono framework at \(outputPathForDisplay)", to: .error)
 }
 
