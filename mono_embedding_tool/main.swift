@@ -337,14 +337,14 @@ class MonoCopier {
         let libmonosgenFilename = "libmonosgen-2.0.dylib"
         let libmonosgenPath = libPath.appendingPathComponent(path: libmonosgenFilename)
         
-        if !changeDylibID(of: libmonosgenPath, to: newDylibID(for: libmonosgenFilename)) {
+        if !changeIDOfDylib(at: libmonosgenPath, to: newDylibID(for: libmonosgenFilename)) {
             return false
         }
         
         let libMonoPosixHelperFilename = "libMonoPosixHelper.dylib"
         let libMonoPosixHelperPath = libPath.appendingPathComponent(path: libMonoPosixHelperFilename)
         
-        if !changeDylibID(of: libMonoPosixHelperPath, to: newDylibID(for: libMonoPosixHelperFilename)) {
+        if !changeIDOfDylib(at: libMonoPosixHelperPath, to: newDylibID(for: libMonoPosixHelperFilename)) {
             return false
         }
         
@@ -361,7 +361,7 @@ class MonoCopier {
             return false
         }
         
-        if !changeDylibID(of: libSystemNativePath, to: newDylibID(for: libSystemNativeFilename)) {
+        if !changeIDOfDylib(at: libSystemNativePath, to: newDylibID(for: libSystemNativeFilename)) {
             return false
         }
         
@@ -471,7 +471,7 @@ class MonoCopier {
         return true
     }
     
-    func changeDylibID(of filePath: String, to newID: String) -> Bool {
+    func changeIDOfDylib(at filePath: String, to newID: String) -> Bool {
         ConsoleIO.printMessage("Changing ID of Dylib \(filePath) to \(newID)...");
         
         let installNameToolPath = "/usr/bin/install_name_tool"
