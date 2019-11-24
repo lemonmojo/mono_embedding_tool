@@ -376,17 +376,6 @@ class MonoCopier {
             return false
         }
         
-        /* let mainFrameworkSymlinkPath = self.outputPath.appendingPathComponent(path: "Mono")
-        let libmonosgenInCurrentVersionPath = "Versions".appendingPathComponent(path: "Current").appendingPathComponent(path: "lib").appendingPathComponent(path: libmonosgenFilename)
-        
-        do {
-            try fileManager.createSymbolicLink(atPath: mainFrameworkSymlinkPath, withDestinationPath: libmonosgenInCurrentVersionPath)
-        } catch {
-            ConsoleIO.printMessage("Failed create symlink for \(libmonosgenInCurrentVersionPath) at \(mainFrameworkSymlinkPath)", to: .error)
-            
-            return false
-        } */
-        
         let mainFrameworkSymlinkInVersionAPath = outputVersionAPath.appendingPathComponent(path: "Mono")
         let libmonosgenInLibPath = "lib".appendingPathComponent(path: libmonosgenFilename)
         
@@ -394,6 +383,17 @@ class MonoCopier {
             try fileManager.createSymbolicLink(atPath: mainFrameworkSymlinkInVersionAPath, withDestinationPath: libmonosgenInLibPath)
         } catch {
             ConsoleIO.printMessage("Failed create symlink for \(libmonosgenInLibPath) at \(mainFrameworkSymlinkInVersionAPath)", to: .error)
+            
+            return false
+        }
+        
+        let mainFrameworkBinarySymlinkPath = self.outputPath.appendingPathComponent(path: "Mono")
+        let libmonosgenInCurrentVersionPath = "Versions".appendingPathComponent(path: "Current").appendingPathComponent(path: "Mono")
+        
+        do {
+            try fileManager.createSymbolicLink(atPath: mainFrameworkBinarySymlinkPath, withDestinationPath: libmonosgenInCurrentVersionPath)
+        } catch {
+            ConsoleIO.printMessage("Failed create symlink for \(libmonosgenInCurrentVersionPath) at \(mainFrameworkBinarySymlinkPath)", to: .error)
             
             return false
         }
