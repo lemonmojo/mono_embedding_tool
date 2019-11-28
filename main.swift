@@ -593,7 +593,7 @@ class Main {
                 return false
             }
         } else {
-            let usageInstructions = "mono_embedding_tool --mono /Library/Mono.framework --out ~/OutputPath --blacklist Accessibility.dll,Commons.Xml.Relaxng.dll"
+            let usageInstructions = "mono_embedding_tool --mono /Library/Frameworks/Mono.framework --out ~/OutputPath --blacklist Accessibility.dll,Commons.Xml.Relaxng.dll"
             
             ConsoleIO.printUsage(usageInstructions)
             
