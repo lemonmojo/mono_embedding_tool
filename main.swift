@@ -83,15 +83,19 @@ class ConsoleIO {
             fputs("Error: \(message)\n", stderr)
         }
     }
+    
+    static func printUsage(_ usageInstructions: String) {
+        fputs("Usage: \(usageInstructions)\n", stderr)
+    }
 }
 
 class FileCollector {
-    var systemMonoPath: String
-    var blacklistedFilenames: [String]
+    let systemMonoPath: String
+    let blacklistedFilenames: [String]
     
-    init(systemMonoPath: String) {
+    init(systemMonoPath: String, blacklistedFilenames: [String] = [String]()) {
         self.systemMonoPath = systemMonoPath
-        self.blacklistedFilenames = [String]()
+        self.blacklistedFilenames = blacklistedFilenames
     }
     
     func pathsOfCollectedFilesRelativeToSystemMonoPath() -> [String] {
@@ -276,7 +280,7 @@ class MonoCopier {
             let absoluteFilePath = self.systemMonoPath.appendingPathComponent(path: relativeFilePath)
             let resolvedAbsoluteFilePath = absoluteFilePath.resolvingSylinksInPath()
             
-            ConsoleIO.printMessage("Going to copy \(resolvedAbsoluteFilePath)...")
+            ConsoleIO.printMessage("Copying \(resolvedAbsoluteFilePath)...")
             
             if relativeFilePath.isDLLFile() { // Put symlinks for all DLLs into lib root folder
                 let dllFileName = relativeFilePath.lastPathComponent()
@@ -298,15 +302,6 @@ class MonoCopier {
             }
             
             let absoluteDestinationPath = outputVersionAPath.appendingPathComponent(path: relativeFilePath)
-            
-            /* let rangeOfSystemMonoPath = resolvedAbsoluteFilePath.range(of: self.systemMonoPath.resolvingSylinksInPath())
-            
-            if let rangeOfSystemMonoPath = rangeOfSystemMonoPath {
-                let newRelativeFilePath = String(resolvedAbsoluteFilePath[rangeOfSystemMonoPath.upperBound...])
-                
-                absoluteDestinationPath = outputVersionAPath.appendingPathComponent(path: newRelativeFilePath)
-            } */
-            
             let absoluteDestinationDirectoryPath = absoluteDestinationPath.deletingLastPathComponent()
             
             if !absoluteDestinationDirectoryPath.directoryExists() {
@@ -493,51 +488,118 @@ class MonoCopier {
     }
 }
 
-let systemMonoPath = CommandLine.arguments[1].expandingTildeInPath().appendingPathComponent(path: "Versions").appendingPathComponent(path: "Current")
-let outputPath = CommandLine.arguments[2].expandingTildeInPath().appendingPathComponent(path: "Mono.framework")
-
-let fileCollector = FileCollector(systemMonoPath: systemMonoPath)
-
-fileCollector.blacklistedFilenames = [
-    "Accessibility.dll",
-    "Commons.Xml.Relaxng.dll",
-    "Microsoft.Visual",
-    "Microsoft.Build",
-    "Mono.Cecil.VB",
-    "Mono.Debugger",
-    "Mono.XBuild.Tasks",
-    "Reactive",
-    "Razor",
-    "Oracle",
-    "System.Windows.Forms.DataVisualization",
-    "System.Xaml",
-    "CodeAnalysis",
-    "IBM",
-    "RabbitMQ",
-    "WindowsBase",
-    "SMDiagnostics.dll",
-    "ICSharpCode.SharpZipLib.dll",
-    "PEAPI.dll",
-    "cscompmgd.dll",
-    "System.Data.Entity.dll",
-    "Novell.Directory.Ldap",
-    "WebMatrix.Data.dll",
-    "System.Web.Mvc.dll"
-]
-
-let relativePaths = fileCollector.pathsOfCollectedFilesRelativeToSystemMonoPath()
-
-let monoCopier = MonoCopier(systemMonoPath: systemMonoPath,
-                            relativeFilePathsToCopy: relativePaths,
-                            outputPath: outputPath)
-
-let success = monoCopier.copy()
-
-let outputPathForDisplay = outputPath.abbreviatingWithTildeInPath()
-
-if success {
-    ConsoleIO.printMessage("Successfully created embeddable Mono framework at \(outputPathForDisplay)")
-} else {
-    ConsoleIO.printMessage("Failed to create embeddable Mono framework at \(outputPathForDisplay)", to: .error)
+class CommandLineOptions {
+    let monoPath: String
+    let outputPath: String
+    let blacklist: [String]
+    
+    static func getArgumentValue(arguments: [String], optionIndex: Int) -> String? {
+        let valueIndex = optionIndex + 1
+        
+        if arguments.count <= valueIndex {
+            return nil
+        } else {
+            let val = arguments[valueIndex]
+            
+            if val.isEmpty || val.starts(with: "--") {
+                return nil
+            }
+            
+            return val
+        }
+    }
+    
+    init?(arguments: [String]) {
+        var _monoPath = ""
+        var _outputPath = ""
+        var _blacklist = [String]()
+        
+        var i = 0
+        
+        for arg in arguments {
+            let argLower = arg.lowercased()
+            
+            switch argLower {
+            case "--mono":
+                if let val = CommandLineOptions.getArgumentValue(arguments: arguments, optionIndex: i) {
+                    _monoPath = val
+                }
+                
+                break
+            case "--out":
+                if let val = CommandLineOptions.getArgumentValue(arguments: arguments, optionIndex: i) {
+                    _outputPath = val
+                }
+                
+                break
+            case "--blacklist":
+                if let val = CommandLineOptions.getArgumentValue(arguments: arguments, optionIndex: i) {
+                    _blacklist = val.components(separatedBy: ",")
+                }
+                
+                break
+            default:
+                break
+            }
+            
+            i += 1
+        }
+        
+        if _monoPath.isEmpty || _outputPath.isEmpty {
+            return nil
+        }
+        
+        self.monoPath = _monoPath
+        self.outputPath = _outputPath
+        self.blacklist = _blacklist
+    }
 }
 
+class Main {
+    static func run() -> Bool {
+        if let options = CommandLineOptions(arguments: CommandLine.arguments) {
+            let monoPath = options.monoPath.expandingTildeInPath().appendingPathComponent(path: "Versions").appendingPathComponent(path: "Current")
+            let outputPath = options.outputPath.expandingTildeInPath().appendingPathComponent(path: "Mono.framework")
+            let blacklist = options.blacklist
+            
+            ConsoleIO.printMessage("")
+            ConsoleIO.printMessage("Configuration:")
+            ConsoleIO.printMessage("  - Mono Path:   \(monoPath)")
+            ConsoleIO.printMessage("  - Output Path: \(outputPath)")
+            ConsoleIO.printMessage("  - Blacklist:   \(blacklist)")
+            ConsoleIO.printMessage("")
+
+            let fileCollector = FileCollector(systemMonoPath: monoPath, blacklistedFilenames: blacklist)
+
+            let relativePaths = fileCollector.pathsOfCollectedFilesRelativeToSystemMonoPath()
+
+            let monoCopier = MonoCopier(systemMonoPath: monoPath,
+                                        relativeFilePathsToCopy: relativePaths,
+                                        outputPath: outputPath)
+
+            let success = monoCopier.copy()
+
+            let outputPathForDisplay = outputPath.abbreviatingWithTildeInPath()
+
+            ConsoleIO.printMessage("")
+            
+            if success {
+                ConsoleIO.printMessage("Successfully created embeddable Mono framework at \(outputPathForDisplay)")
+                
+                return true
+            } else {
+                ConsoleIO.printMessage("Failed to create embeddable Mono framework at \(outputPathForDisplay)", to: .error)
+                
+                return false
+            }
+        } else {
+            let usageInstructions = "mono_embedding_tool --mono /Library/Mono.framework --out ~/OutputPath --blacklist Accessibility.dll,Commons.Xml.Relaxng.dll"
+            
+            ConsoleIO.printUsage(usageInstructions)
+            
+            return false
+        }
+    }
+}
+
+exit(Main.run() ? 0 : 1)

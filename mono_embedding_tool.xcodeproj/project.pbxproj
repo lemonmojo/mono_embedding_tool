@@ -41,7 +41,7 @@
 		E7273A06238A7754005F4A56 = {
 			isa = PBXGroup;
 			children = (
-				E7273A11238A7754005F4A56 /* mono_embedding_tool */,
+				E7273A12238A7754005F4A56 /* main.swift */,
 				E7273A10238A7754005F4A56 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -52,14 +52,6 @@
 				E7273A0F238A7754005F4A56 /* mono_embedding_tool */,
 			);
 			name = Products;
-			sourceTree = "<group>";
-		};
-		E7273A11238A7754005F4A56 /* mono_embedding_tool */ = {
-			isa = PBXGroup;
-			children = (
-				E7273A12238A7754005F4A56 /* main.swift */,
-			);
-			path = mono_embedding_tool;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
