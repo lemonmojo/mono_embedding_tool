@@ -67,6 +67,10 @@ extension String {
         
         return exists && isDirectory.boolValue
     }
+    
+    func isWritablePath() -> Bool {
+        return FileManager.default.isWritableFile(atPath: self)
+    }
 }
 
 class ConsoleIO {
@@ -568,6 +572,18 @@ class Main {
             ConsoleIO.printMessage("  - Output Path: \(outputPath)")
             ConsoleIO.printMessage("  - Blacklist:   \(blacklist)")
             ConsoleIO.printMessage("")
+            
+            if !monoPath.directoryExists() {
+                ConsoleIO.printMessage("Mono Path does not exist at \(monoPath)", to: .error)
+                
+                return false
+            }
+            
+            if !outputPath.isWritablePath() {
+                ConsoleIO.printMessage("Output Path is not writable at \(outputPath)", to: .error)
+                
+                return false
+            }
 
             let fileCollector = FileCollector(systemMonoPath: monoPath, blacklistedFilenames: blacklist)
 
