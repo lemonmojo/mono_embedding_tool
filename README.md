@@ -2,7 +2,7 @@
 
 ## Introduction
 
-This tool allows you to build an embeddable Mono.framework for macOS. It's written in Swift in a single file and can either be pre-compiled or run directly with `Swift mono_embedding_tool`.
+This tool allows you to build an embeddable Mono.framework for macOS. It's written as a single-file Swift program and can either be pre-compiled or run directly with `Swift /Path/To/mono_embedding_tool/main.swift`.
 
 Here's a list of the actions being performed:
 
