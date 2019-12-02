@@ -18,10 +18,14 @@ Here's a list of the actions being performed:
 ## Usage
 
 Without compilation:
-`Swift /Path/To/mono_embedding_tool/main.swift --mono /Library/Frameworks/Mono.framework --out ~/OutputPath --blacklist Accessibility.dll,Commons.Xml.Relaxng.dll`
+```
+Swift /Path/To/mono_embedding_tool/main.swift --mono /Library/Frameworks/Mono.framework --out ~/OutputPath --blacklist Accessibility.dll,Commons.Xml.Relaxng.dll
+```
 
 With prior compilation:
-`mono_embedding_tool --mono /Library/Frameworks/Mono.framework --out ~/OutputPath --blacklist Accessibility.dll,Commons.Xml.Relaxng.dll`
+```
+mono_embedding_tool --mono /Library/Frameworks/Mono.framework --out ~/OutputPath --blacklist Accessibility.dll,Commons.Xml.Relaxng.dll
+```
 
 Arguments:
 
