@@ -75,6 +75,10 @@
             argument = "Accessibility.dll,Commons.Xml.Relaxng.dll,Microsoft.Visual,Microsoft.Build,Mono.Cecil.VB,Mono.Debugger,Mono.XBuild.Tasks,Reactive,Razor,Oracle,System.Windows.Forms.DataVisualization,System.Xaml,CodeAnalysis,IBM,RabbitMQ,WindowsBase,SMDiagnostics.dll,ICSharpCode.SharpZipLib.dll,PEAPI.dll,cscompmgd.dll,System.Data.Entity.dll,Novell.Directory.Ldap,WebMatrix.Data.dll,System.Web.Mvc.dll"
             isEnabled = "YES">
          </CommandLineArgument>
+         <CommandLineArgument
+            argument = "--compress"
+            isEnabled = "YES">
+         </CommandLineArgument>
       </CommandLineArguments>
    </LaunchAction>
    <ProfileAction

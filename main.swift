@@ -7,6 +7,7 @@
 //
 
 import Foundation
+import zlib
 
 extension String {
     func lastPathComponent() -> String {
@@ -70,6 +71,71 @@ extension String {
     
     func isWritablePath() -> Bool {
         return FileManager.default.isWritableFile(atPath: self)
+    }
+}
+
+extension Data {
+    var isGzipped: Bool {
+        return self.starts(with: [0x1f, 0x8b])  // check magic number
+    }
+    
+    public func gzipped(level: Int32 = Z_DEFAULT_COMPRESSION) -> Data? {
+        
+        guard !self.isEmpty else {
+            return Data()
+        }
+        
+        var stream = z_stream()
+        var status: Int32
+        
+        let streamSize = MemoryLayout<z_stream>.size
+        let chunk = 1 << 14
+        
+        status = deflateInit2_(&stream, level, Z_DEFLATED, MAX_WBITS + 16, MAX_MEM_LEVEL, Z_DEFAULT_STRATEGY, ZLIB_VERSION, Int32(streamSize))
+        
+        guard status == Z_OK else {
+            // deflateInit2 returns:
+            // Z_VERSION_ERROR  The zlib library version is incompatible with the version assumed by the caller.
+            // Z_MEM_ERROR      There was not enough memory.
+            // Z_STREAM_ERROR   A parameter is invalid.
+            
+            return nil
+        }
+        
+        var data = Data(capacity: chunk)
+        repeat {
+            if Int(stream.total_out) >= data.count {
+                data.count += chunk
+            }
+            
+            let inputCount = self.count
+            let outputCount = data.count
+            
+            self.withUnsafeBytes { (inputPointer: UnsafeRawBufferPointer) in
+                stream.next_in = UnsafeMutablePointer<Bytef>(mutating: inputPointer.bindMemory(to: Bytef.self).baseAddress!).advanced(by: Int(stream.total_in))
+                stream.avail_in = uint(inputCount) - uInt(stream.total_in)
+                
+                data.withUnsafeMutableBytes { (outputPointer: UnsafeMutableRawBufferPointer) in
+                    stream.next_out = outputPointer.bindMemory(to: Bytef.self).baseAddress!.advanced(by: Int(stream.total_out))
+                    stream.avail_out = uInt(outputCount) - uInt(stream.total_out)
+                    
+                    status = deflate(&stream, Z_FINISH)
+                    
+                    stream.next_out = nil
+                }
+                
+                stream.next_in = nil
+            }
+            
+        } while stream.avail_out == 0
+        
+        guard deflateEnd(&stream) == Z_OK, status == Z_STREAM_END else {
+            return nil
+        }
+        
+        data.count = Int(stream.total_out)
+        
+        return data
     }
 }
 
@@ -176,10 +242,213 @@ class FileCollector {
     }
 }
 
+struct CompressedMetaData: Codable {
+    let name: String
+    let offset: Int
+    let size: Int
+}
+
+class MonoAssemblyDecompressionUtils {
+    private static let metaDatasToken = "$$$$METADATAS$$$$"
+    
+    private static let headerContent = """
+#ifndef Mono_h
+#define Mono_h
+
+#import <Foundation/Foundation.h>
+#import <zlib.h>
+
+@interface METCompressedAssemblyMetaData : NSObject
+
+@property (copy) NSString* name;
+@property (assign) NSInteger offset;
+@property (assign) NSInteger size;
+
+- (instancetype)initWithName:(NSString*)name offset:(NSInteger)offset size:(NSInteger)size;
++ (instancetype)metaDataWithName:(NSString*)name offset:(NSInteger)offset size:(NSInteger)size;
+
+@end
+
+@implementation METCompressedAssemblyMetaData
+
+- (instancetype)initWithName:(NSString *)name offset:(NSInteger)offset size:(NSInteger)size {
+    self = [super init];
+    
+    if (self) {
+        self.name = name;
+        self.offset = offset;
+        self.size = size;
+    }
+    
+    return self;
+}
+
++ (instancetype)metaDataWithName:(NSString *)name offset:(NSInteger)offset size:(NSInteger)size {
+    return [[METCompressedAssemblyMetaData alloc] initWithName:name offset:offset size:size];
+}
+
+@end
+
+
+@interface METAssemblyDecompressor: NSObject
+
++ (NSData*)decompressedDataOfAssemblyWithName:(NSString*)name inMonoFrameworkBundle:(NSBundle*)bundle;
++ (NSDictionary<NSString*, NSData*>*)decompressedDataOfAllAssembliesInMonoFrameworkBundle:(NSBundle*)bundle;
+
+@end
+
+
+@implementation METAssemblyDecompressor
+
+static NSDictionary<NSString*, METCompressedAssemblyMetaData*>* metaDatas;
+
++ (void)initialize {
+    static dispatch_once_t onceToken;
+    
+    dispatch_once(&onceToken, ^{
+        metaDatas = @{
+$$$$METADATAS$$$$
+        };
+    });
+}
+
++ (NSData*)gunzippedDataWithData:(NSData*)data {
+    if (data.length == 0) {
+        return data;
+    }
+    
+    const UInt8 *bytes = (const UInt8 *)data.bytes;
+    
+    if (!(data.length >= 2 && bytes[0] == 0x1f && bytes[1] == 0x8b)) {
+        // Is not gzipped
+        return data;
+    }
+
+    z_stream stream;
+    stream.zalloc = Z_NULL;
+    stream.zfree = Z_NULL;
+    stream.avail_in = (uint)data.length;
+    stream.next_in = (Bytef *)data.bytes;
+    stream.total_out = 0;
+    stream.avail_out = 0;
+
+    NSMutableData *output = nil;
+    
+    if (inflateInit2(&stream, 47) == Z_OK) {
+        int status = Z_OK;
+        output = [NSMutableData dataWithCapacity:data.length * 2];
+        
+        while (status == Z_OK) {
+            if (stream.total_out >= output.length) {
+                output.length += data.length / 2;
+            }
+            stream.next_out = (uint8_t *)output.mutableBytes + stream.total_out;
+            stream.avail_out = (uInt)(output.length - stream.total_out);
+            status = inflate (&stream, Z_SYNC_FLUSH);
+        }
+        
+        if (inflateEnd(&stream) == Z_OK) {
+            if (status == Z_STREAM_END) {
+                output.length = stream.total_out;
+            }
+        }
+    }
+
+    return output;
+}
+
++ (NSData*)decompressedDataOfAssemblyWithMetaData:(METCompressedAssemblyMetaData*)metaData inBinData:(NSData*)binData {
+    if (!metaData ||
+        !binData) {
+        return nil;
+    }
+    
+    NSData* compressedData = [binData subdataWithRange:NSMakeRange(metaData.offset, metaData.size)];
+    NSData* data = [self gunzippedDataWithData:compressedData];
+    
+    return data;
+}
+
++ (NSData*)binDataWithMonoFrameworkBundle:(NSBundle*)bundle {
+    if (!bundle) {
+        return nil;
+    }
+    
+    NSString* bundlePath = bundle.bundlePath;
+    
+    NSString* libPath = [[bundlePath stringByAppendingPathComponent:@"/Versions/Current/lib"] stringByResolvingSymlinksInPath];
+    NSString* binFileName = @"Assemblies.bin";
+    
+    NSString* binFilePath = [libPath stringByAppendingPathComponent:binFileName];
+    
+    NSData* binData = [NSData dataWithContentsOfFile:binFilePath];
+    
+    return binData;
+}
+
++ (NSData*)decompressedDataOfAssemblyWithName:(NSString*)name inMonoFrameworkBundle:(NSBundle*)bundle {
+    if (!bundle) {
+        return nil;
+    }
+    
+    METCompressedAssemblyMetaData* metaData = metaDatas[name];
+    
+    if (!metaData) {
+        return nil;
+    }
+    
+    NSData* binData = [self binDataWithMonoFrameworkBundle:bundle];
+    
+    NSData* data = [self decompressedDataOfAssemblyWithMetaData:metaData inBinData:binData];
+    
+    return data;
+}
+
++ (NSDictionary<NSString*, NSData*>*)decompressedDataOfAllAssembliesInMonoFrameworkBundle:(NSBundle*)bundle {
+    if (!bundle) {
+        return nil;
+    }
+    
+    NSMutableDictionary<NSString*, NSData*>* datas = NSMutableDictionary.dictionary;
+    
+    NSData* binData = [self binDataWithMonoFrameworkBundle:bundle];
+    
+    if (!binData) {
+        return nil;
+    }
+    
+    [metaDatas enumerateKeysAndObjectsUsingBlock:^(NSString * _Nonnull name, METCompressedAssemblyMetaData * _Nonnull metaData, BOOL * _Nonnull stop) {
+        NSData* data = [self decompressedDataOfAssemblyWithMetaData:metaData inBinData:binData];
+        
+        datas[metaData.name] = data;
+    }];
+    
+    return datas;
+}
+
+@end
+
+#endif /* Mono_h */
+"""
+    
+    static func headerContent(metaDatas: [CompressedMetaData]) -> String {
+        var metaDatasStr = ""
+        
+        for metaData in metaDatas {
+            metaDatasStr.append("            @\"\(metaData.name)\": [METCompressedAssemblyMetaData metaDataWithName:@\"\(metaData.name)\" offset:\(metaData.offset) size:\(metaData.size)],\n")
+        }
+        
+        let content = self.headerContent.replacingOccurrences(of: self.metaDatasToken, with: metaDatasStr)
+        
+        return content
+    }
+}
+
 class MonoCopier {
     var systemMonoPath: String
     let relativeFilePathsToCopy: [String]
     let outputPath: String
+    let compress: Bool
     
     let infoPlistContent = """
 <?xml version="1.0" encoding="UTF-8"?>
@@ -210,10 +479,11 @@ class MonoCopier {
 </plist>
 """
     
-    init(systemMonoPath: String, relativeFilePathsToCopy: [String], outputPath: String) {
+    init(systemMonoPath: String, relativeFilePathsToCopy: [String], outputPath: String, compress: Bool) {
         self.systemMonoPath = systemMonoPath
         self.relativeFilePathsToCopy = relativeFilePathsToCopy
         self.outputPath = outputPath
+        self.compress = compress
     }
     
     func copy() -> Bool {
@@ -247,6 +517,16 @@ class MonoCopier {
             return false
         }
         
+        let outputVersionAHeadersPath = outputVersionAPath.appendingPathComponent(path: "Headers")
+        
+        do {
+            try fileManager.createDirectory(atPath: outputVersionAHeadersPath, withIntermediateDirectories: true, attributes: nil)
+        } catch {
+            ConsoleIO.printMessage("Failed to create Versions/A/Headers directory", to: .error)
+            
+            return false
+        }
+        
         let outputVersionAResourcesPath = outputVersionAPath.appendingPathComponent(path: "Resources")
         
         do {
@@ -267,18 +547,11 @@ class MonoCopier {
             return false
         }
         
-        let outputResourcesPath = self.outputPath.appendingPathComponent(path: "Resources")
-        let versionsCurrentResourcesRelativePath = "Versions/Current/Resources"
-        
-        do {
-            try fileManager.createSymbolicLink(atPath: outputResourcesPath, withDestinationPath: versionsCurrentResourcesRelativePath)
-        } catch {
-            ConsoleIO.printMessage("Failed create symlink for \(versionsCurrentResourcesRelativePath) at \(outputResourcesPath)", to: .error)
-            
-            return false
-        }
-        
         let libPath = outputVersionAPath.appendingPathComponent(path: "lib")
+        
+        var compressedMetaDatas = [CompressedMetaData]()
+        var compressedDataOffset = 0
+        var compressedDataBlock = Data()
         
         for relativeFilePath in self.relativeFilePathsToCopy {
             let absoluteFilePath = self.systemMonoPath.appendingPathComponent(path: relativeFilePath)
@@ -286,7 +559,9 @@ class MonoCopier {
             
             ConsoleIO.printMessage("Copying \(resolvedAbsoluteFilePath)...")
             
-            if relativeFilePath.isDLLFile() { // Put symlinks for all DLLs into lib root folder
+            let isDLLFile = relativeFilePath.isDLLFile()
+            
+            if !compress && isDLLFile { // Put symlinks for all DLLs into lib root folder
                 let dllFileName = relativeFilePath.lastPathComponent()
                 let symlinkPath = libPath.appendingPathComponent(path: dllFileName)
                 
@@ -318,17 +593,60 @@ class MonoCopier {
                 }
             }
             
-            do {
-                try fileManager.copyItem(atPath: resolvedAbsoluteFilePath, toPath: absoluteDestinationPath)
-            } catch {
-                ConsoleIO.printMessage("Failed to create copy file from \(resolvedAbsoluteFilePath)", to: .error)
-                
-                return false
+            var shouldCopy = true
+            
+            if compress && isDLLFile {
+                // Compress
+                if let compressedData = compressedData(ofFileAtPath: resolvedAbsoluteFilePath) {
+                    let fileName = resolvedAbsoluteFilePath.lastPathComponent()
+                    let size = compressedData.count
+                    
+                    let metaData = CompressedMetaData(name: fileName, offset: compressedDataOffset, size: size)
+                    
+                    compressedMetaDatas.append(metaData)
+                    compressedDataBlock.append(compressedData)
+                    
+                    compressedDataOffset += size
+                    
+                    shouldCopy = false
+                } else {
+                    ConsoleIO.printMessage("Failed to compress file from \(resolvedAbsoluteFilePath)", to: .error)
+                    
+                    return false
+                }
+            }
+            
+            if shouldCopy {
+                do {
+                    try fileManager.copyItem(atPath: resolvedAbsoluteFilePath, toPath: absoluteDestinationPath)
+                } catch {
+                    ConsoleIO.printMessage("Failed to create copy file from \(resolvedAbsoluteFilePath)", to: .error)
+                    
+                    return false
+                }
             }
             
             if !processCopiedFile(copiedFilePath: absoluteDestinationPath) {
                 ConsoleIO.printMessage("Failed to process copied file \(absoluteDestinationPath)", to: .error)
                 
+                return false
+            }
+        }
+        
+        if compress && compressedDataBlock.count > 0 {
+            let compressedAssembliesFileName = "Assemblies.bin"
+            let compressedAssembliesDestinationPath = libPath.appendingPathComponent(path: compressedAssembliesFileName)
+            
+            let compressedAssembliesHeaderFileName = "Mono.h"
+            let compressedAssembliesHeaderDestinationPath = outputVersionAHeadersPath.appendingPathComponent(path: compressedAssembliesHeaderFileName)
+            
+            let headerContent = MonoAssemblyDecompressionUtils.headerContent(metaDatas: compressedMetaDatas)
+            
+            do {
+                try compressedDataBlock.write(to: compressedAssembliesDestinationPath.fileURLFromPath())
+                
+                try headerContent.data(using: .utf8)?.write(to: compressedAssembliesHeaderDestinationPath.fileURLFromPath())
+            } catch {
                 return false
             }
         }
@@ -375,6 +693,28 @@ class MonoCopier {
             return false
         }
         
+        let outputHeadersPath = self.outputPath.appendingPathComponent(path: "Headers")
+        let versionsCurrentHeadersRelativePath = "Versions/Current/Headers"
+        
+        do {
+            try fileManager.createSymbolicLink(atPath: outputHeadersPath, withDestinationPath: versionsCurrentHeadersRelativePath)
+        } catch {
+            ConsoleIO.printMessage("Failed create symlink for \(versionsCurrentHeadersRelativePath) at \(outputHeadersPath)", to: .error)
+            
+            return false
+        }
+        
+        let outputResourcesPath = self.outputPath.appendingPathComponent(path: "Resources")
+        let versionsCurrentResourcesRelativePath = "Versions/Current/Resources"
+        
+        do {
+            try fileManager.createSymbolicLink(atPath: outputResourcesPath, withDestinationPath: versionsCurrentResourcesRelativePath)
+        } catch {
+            ConsoleIO.printMessage("Failed create symlink for \(versionsCurrentResourcesRelativePath) at \(outputResourcesPath)", to: .error)
+            
+            return false
+        }
+        
         let mainFrameworkSymlinkInVersionAPath = outputVersionAPath.appendingPathComponent(path: "Mono")
         let libmonosgenInLibPath = "lib".appendingPathComponent(path: libmonosgenFilename)
         
@@ -402,30 +742,6 @@ class MonoCopier {
     
     func newDylibID(for fileName: String) -> String {
         return "@rpath/Mono.framework/Versions/Current/lib/\(fileName)"
-    }
-    
-    func processCopiedFile(copiedFilePath: String) -> Bool {
-        if copiedFilePath.isDylibFile() {
-            if !stripAllArchitectures(except: "x86_64", of: copiedFilePath) {
-                return false
-            }
-        }
-        
-        return true
-    }
-    
-    func runProcess(launchPath: String, arguments: [String]) -> Bool {
-        let proc = Process()
-        
-        proc.launchPath = launchPath
-        proc.arguments = arguments
-        
-        proc.launch()
-        proc.waitUntilExit()
-        
-        let success = proc.terminationStatus == 0
-        
-        return success
     }
     
     func stripAllArchitectures(except targetArchitecture: String, of filePath: String) -> Bool {
@@ -470,6 +786,41 @@ class MonoCopier {
         return true
     }
     
+    func processCopiedFile(copiedFilePath: String) -> Bool {
+        if copiedFilePath.isDylibFile() {
+            if !stripAllArchitectures(except: "x86_64", of: copiedFilePath) {
+                return false
+            }
+        }
+        
+        return true
+    }
+    
+    func compressedData(ofFileAtPath filePath: String) -> Data? {
+        do {
+            let data = try Data(contentsOf: filePath.fileURLFromPath())
+            let compressedData = data.gzipped()
+            
+            return compressedData
+        } catch {
+            return nil
+        }
+    }
+    
+    func runProcess(launchPath: String, arguments: [String]) -> Bool {
+        let proc = Process()
+        
+        proc.launchPath = launchPath
+        proc.arguments = arguments
+        
+        proc.launch()
+        proc.waitUntilExit()
+        
+        let success = proc.terminationStatus == 0
+        
+        return success
+    }
+    
     func changeIDOfDylib(at filePath: String, to newID: String) -> Bool {
         ConsoleIO.printMessage("Changing ID of Dylib \(filePath) to \(newID)...");
         
@@ -495,6 +846,7 @@ class MonoCopier {
 class CommandLineOptions {
     let monoPath: String
     let outputPath: String
+    let compress: Bool
     let blacklist: [String]
     
     static func getArgumentValue(arguments: [String], optionIndex: Int) -> String? {
@@ -516,6 +868,7 @@ class CommandLineOptions {
     init?(arguments: [String]) {
         var _monoPath = ""
         var _outputPath = ""
+        var _compress = false
         var _blacklist = [String]()
         
         var i = 0
@@ -534,6 +887,10 @@ class CommandLineOptions {
                 if let val = CommandLineOptions.getArgumentValue(arguments: arguments, optionIndex: i) {
                     _outputPath = val
                 }
+                
+                break
+            case "--compress":
+                _compress = true
                 
                 break
             case "--blacklist":
@@ -555,6 +912,7 @@ class CommandLineOptions {
         
         self.monoPath = _monoPath
         self.outputPath = _outputPath
+        self.compress = _compress
         self.blacklist = _blacklist
     }
 }
@@ -564,12 +922,14 @@ class Main {
         if let options = CommandLineOptions(arguments: CommandLine.arguments) {
             let monoPath = options.monoPath.expandingTildeInPath().appendingPathComponent(path: "Versions").appendingPathComponent(path: "Current")
             let outputPath = options.outputPath.expandingTildeInPath().appendingPathComponent(path: "Mono.framework")
+            let compress = options.compress
             let blacklist = options.blacklist
             
             ConsoleIO.printMessage("")
             ConsoleIO.printMessage("Configuration:")
             ConsoleIO.printMessage("  - Mono Path:   \(monoPath)")
             ConsoleIO.printMessage("  - Output Path: \(outputPath)")
+            ConsoleIO.printMessage("  - Compress:    \(compress)")
             ConsoleIO.printMessage("  - Blacklist:   \(blacklist)")
             ConsoleIO.printMessage("")
             
@@ -579,11 +939,12 @@ class Main {
                 return false
             }
             
-            if !outputPath.isWritablePath() {
+            // TODO: This check does not work if the path does not already exist
+            /* if !outputPath.isWritablePath() {
                 ConsoleIO.printMessage("Output Path is not writable at \(outputPath)", to: .error)
                 
                 return false
-            }
+            } */
 
             let fileCollector = FileCollector(systemMonoPath: monoPath, blacklistedFilenames: blacklist)
 
@@ -591,7 +952,8 @@ class Main {
 
             let monoCopier = MonoCopier(systemMonoPath: monoPath,
                                         relativeFilePathsToCopy: relativePaths,
-                                        outputPath: outputPath)
+                                        outputPath: outputPath,
+                                        compress: compress)
 
             let success = monoCopier.copy()
 
@@ -609,7 +971,7 @@ class Main {
                 return false
             }
         } else {
-            let usageInstructions = "mono_embedding_tool --mono /Library/Frameworks/Mono.framework --out ~/OutputPath --blacklist Accessibility.dll,Commons.Xml.Relaxng.dll"
+            let usageInstructions = "mono_embedding_tool --mono /Library/Frameworks/Mono.framework --out ~/OutputPath [--blacklist Accessibility.dll,Commons.Xml.Relaxng.dll] [--compress]"
             
             ConsoleIO.printUsage(usageInstructions)
             
