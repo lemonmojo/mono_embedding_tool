@@ -39,6 +39,14 @@ extension String {
         let nsStr = self as NSString
         return nsStr.deletingLastPathComponent
     }
+	
+	func replacingFirstOccurrence(of target: String, with replacementString: String) -> String {
+        if let range = self.range(of: target) {
+            return self.replacingCharacters(in: range, with: replacementString)
+        }
+		
+        return self
+    }
     
     func contains(string otherString: String, caseSensitive: Bool = true) -> Bool {
         return self.range(of: otherString, options: caseSensitive ? [] : [.caseInsensitive], range: nil, locale: nil) != nil
@@ -178,15 +186,15 @@ class FileCollector {
         let libPath = "/lib"
         
         let libmonosgenPath = libPath.appendingPathComponent(path: "libmonosgen-2.0.dylib")
-        
         collectedRelativePaths.append(libmonosgenPath)
         
+		let libintlPath = libPath.appendingPathComponent(path: "libintl.8.dylib")
+        collectedRelativePaths.append(libintlPath)
+		
         let libmononativecompatPath = libPath.appendingPathComponent(path: "libmono-native-compat.0.dylib")
-        
         collectedRelativePaths.append(libmononativecompatPath)
         
         let libMonoPosixHelperPath = libPath.appendingPathComponent(path: "libMonoPosixHelper.dylib")
-        
         collectedRelativePaths.append(libMonoPosixHelperPath)
         
         let libMonoPath = libPath.appendingPathComponent(path: "/mono")
@@ -449,6 +457,9 @@ class MonoCopier {
     let relativeFilePathsToCopy: [String]
     let outputPath: String
     let compress: Bool
+	
+	let installNameToolPath = "/usr/bin/install_name_tool"
+	let otoolPath = "/usr/bin/otool"
     
     let infoPlistContent = """
 <?xml version="1.0" encoding="UTF-8"?>
@@ -650,13 +661,45 @@ class MonoCopier {
                 return false
             }
         }
+		
+		let libintlFilename = "libintl.8.dylib"
+		let libintlPath = libPath.appendingPathComponent(path: libintlFilename)
+		let libintlDestinationFilename = "libintl.dylib"
+		let libintlDestinationPath = libPath.appendingPathComponent(path: "mono").appendingPathComponent(path: "4.5").appendingPathComponent(path: libintlDestinationFilename)
+		var oldLibintlDylibID = ""
+		
+		if let id = idOfDylib(at: libintlPath) {
+			oldLibintlDylibID = id
+		} else {
+			ConsoleIO.printMessage("Failed to get ID of dylib \(libintlPath)", to: .error)
+			
+			return false
+		}
+		
+		do {
+            try fileManager.moveItem(atPath: libintlPath, toPath: libintlDestinationPath)
+        } catch {
+            ConsoleIO.printMessage("Failed to rename \(libintlFilename) to \(libintlDestinationFilename)", to: .error)
+            
+            return false
+        }
+		
+		let newLibintlDylibID = newDylibID(for: "mono".appendingPathComponent(path: "4.5").appendingPathComponent(path: libintlDestinationFilename))
         
+		if !changeIDOfDylib(at: libintlDestinationPath, to: newLibintlDylibID) {
+            return false
+        }
+		
         let libmonosgenFilename = "libmonosgen-2.0.dylib"
         let libmonosgenPath = libPath.appendingPathComponent(path: libmonosgenFilename)
         
         if !changeIDOfDylib(at: libmonosgenPath, to: newDylibID(for: libmonosgenFilename)) {
             return false
         }
+		
+		if !changeDependencyOfDylib(at: libmonosgenPath, oldDependency: oldLibintlDylibID, newDependency: newLibintlDylibID) {
+			return false
+		}
         
         let libMonoPosixHelperFilename = "libMonoPosixHelper.dylib"
         let libMonoPosixHelperPath = libPath.appendingPathComponent(path: libMonoPosixHelperFilename)
@@ -664,6 +707,10 @@ class MonoCopier {
         if !changeIDOfDylib(at: libMonoPosixHelperPath, to: newDylibID(for: libMonoPosixHelperFilename)) {
             return false
         }
+		
+		if !changeDependencyOfDylib(at: libMonoPosixHelperPath, oldDependency: oldLibintlDylibID, newDependency: newLibintlDylibID) {
+			return false
+		}
         
         let libMonoNativeCompatFilename = "libmono-native-compat.0.dylib"
         let libMonoNativeCompatPath = libPath.appendingPathComponent(path: libMonoNativeCompatFilename)
@@ -678,9 +725,13 @@ class MonoCopier {
             return false
         }
         
-        if !changeIDOfDylib(at: libSystemNativePath, to: newDylibID(for: libSystemNativeFilename)) {
+        if !changeIDOfDylib(at: libSystemNativePath, to: newDylibID(for: "mono".appendingPathComponent(path: "4.5").appendingPathComponent(path: libSystemNativeFilename))) {
             return false
         }
+		
+		if !changeDependencyOfDylib(at: libSystemNativePath, oldDependency: oldLibintlDylibID, newDependency: newLibintlDylibID) {
+			return false
+		}
         
         let outputVersionCurrentPath = self.outputPath.appendingPathComponent(path: "Versions").appendingPathComponent(path: "Current")
         let versionARelativePath = "A";
@@ -738,10 +789,6 @@ class MonoCopier {
         }
         
         return true
-    }
-    
-    func newDylibID(for fileName: String) -> String {
-        return "@rpath/Mono.framework/Versions/Current/lib/\(fileName)"
     }
     
     func stripAllArchitectures(except targetArchitecture: String, of filePath: String) -> Bool {
@@ -820,13 +867,59 @@ class MonoCopier {
         
         return success
     }
+	
+	func runProcessAndGetStdOut(launchPath: String, arguments: [String]) -> (success: Bool, stdout: String) {
+        let proc = Process()
+        
+        proc.launchPath = launchPath
+        proc.arguments = arguments
+		
+		let pipeStdOut = Pipe()
+		proc.standardOutput = pipeStdOut
+        
+        proc.launch()
+        proc.waitUntilExit()
+		
+		let success = proc.terminationStatus == 0
+		
+		let dataStdOut = pipeStdOut.fileHandleForReading.readDataToEndOfFile()
+		
+		var stringStdOut = ""
+		
+		if let str = String(data: dataStdOut, encoding: String.Encoding.utf8) {
+			stringStdOut = str
+		}
+		
+        return (success, stringStdOut)
+    }
     
+	func newDylibID(for fileName: String) -> String {
+        return "@rpath/Mono.framework/Versions/Current/lib/\(fileName)"
+    }
+	
+	func idOfDylib(at filePath: String) -> String? {
+		ConsoleIO.printMessage("Getting ID of Dylib \(filePath)...");
+		
+		let ret = runProcessAndGetStdOut(launchPath: self.otoolPath, arguments: [
+			"-D",
+			filePath
+		])
+		
+		if ret.success {
+			let stdout = ret.stdout
+			
+			let id = stdout.replacingFirstOccurrence(of: "\(filePath):\n", with: "").trimmingCharacters(in: [ "\n" ])
+			
+			return id
+		}
+		
+		return nil
+	}
+	
     func changeIDOfDylib(at filePath: String, to newID: String) -> Bool {
         ConsoleIO.printMessage("Changing ID of Dylib \(filePath) to \(newID)...");
         
-        let installNameToolPath = "/usr/bin/install_name_tool"
-        
-        let success = runProcess(launchPath: installNameToolPath, arguments: [
+		let success = runProcess(launchPath: self.installNameToolPath, arguments: [
             "-id",
             newID,
             
@@ -835,6 +928,26 @@ class MonoCopier {
         
         if !success {
             ConsoleIO.printMessage("Failed to change ID of Dylib \(filePath) to \(newID)", to: .error);
+            
+            return false
+        }
+        
+        return true
+    }
+	
+	func changeDependencyOfDylib(at filePath: String, oldDependency: String, newDependency: String) -> Bool {
+        ConsoleIO.printMessage("Changing dependency \(oldDependency) of Dylib \(filePath) to \(newDependency)...");
+        
+		let success = runProcess(launchPath: self.installNameToolPath, arguments: [
+            "-change",
+            oldDependency,
+			newDependency,
+            
+            filePath
+        ])
+        
+        if !success {
+            ConsoleIO.printMessage("Failed to change dependency \(oldDependency) of Dylib \(filePath) to \(newDependency)", to: .error);
             
             return false
         }
