@@ -19,12 +19,12 @@ Here's a list of the actions being performed:
 
 Without compilation:
 ```
-swift /Path/To/mono_embedding_tool/main.swift --out ~/OutputPath --blacklist Accessibility.dll,Commons.Xml.Relaxng.dll
+swift /Path/To/mono_embedding_tool/main.swift --out ~/OutputPath --blacklist Accessibility.dll,System.Web.Mvc.dll
 ```
 
 With prior compilation:
 ```
-mono_embedding_tool --out ~/OutputPath --blacklist Accessibility.dll,Commons.Xml.Relaxng.dll
+mono_embedding_tool --out ~/OutputPath --blacklist Accessibility.dll,System.Web.Mvc.dll
 ```
 
 Arguments:
