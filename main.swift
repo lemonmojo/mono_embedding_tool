@@ -1019,7 +1019,7 @@ class CommandLineOptions {
             i += 1
         }
         
-        if _monoPath.isEmpty || _outputPath.isEmpty {
+        if _outputPath.isEmpty {
             return nil
         }
         
@@ -1031,10 +1031,20 @@ class CommandLineOptions {
 }
 
 class Main {
+	static let usageInstructions = "mono_embedding_tool --out ~/OutputPath [--mono /Library/Frameworks/Mono.framework] [--blacklist Accessibility.dll,Commons.Xml.Relaxng.dll] [--compress]"
+	static let defaultMonoPath = "/Library/Frameworks/Mono.framework"
+	
     static func run() -> Bool {
         if let options = CommandLineOptions(arguments: CommandLine.arguments) {
-            let monoPath = options.monoPath.expandingTildeInPath().appendingPathComponent(path: "Versions").appendingPathComponent(path: "Current")
-            let outputPath = options.outputPath.expandingTildeInPath().appendingPathComponent(path: "Mono.framework")
+			let monoPath = (options.monoPath.isEmpty ? defaultMonoPath : options.monoPath)
+				.expandingTildeInPath()
+				.appendingPathComponent(path: "Versions")
+				.appendingPathComponent(path: "Current")
+			
+            let outputPath = options.outputPath
+				.expandingTildeInPath()
+				.appendingPathComponent(path: "Mono.framework")
+			
             let compress = options.compress
             let blacklist = options.blacklist
             
@@ -1084,8 +1094,6 @@ class Main {
                 return false
             }
         } else {
-            let usageInstructions = "mono_embedding_tool --mono /Library/Frameworks/Mono.framework --out ~/OutputPath [--blacklist Accessibility.dll,Commons.Xml.Relaxng.dll] [--compress]"
-            
             ConsoleIO.printUsage(usageInstructions)
             
             return false

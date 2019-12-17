@@ -53,11 +53,11 @@
       <CommandLineArguments>
          <CommandLineArgument
             argument = "--mono"
-            isEnabled = "YES">
+            isEnabled = "NO">
          </CommandLineArgument>
          <CommandLineArgument
-            argument = "/Library/Frameworks/Mono.framework"
-            isEnabled = "YES">
+            argument = "/Library/Frameworks/Mono"
+            isEnabled = "NO">
          </CommandLineArgument>
          <CommandLineArgument
             argument = "--out"
