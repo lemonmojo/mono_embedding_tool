@@ -1031,7 +1031,7 @@ class CommandLineOptions {
 }
 
 class Main {
-	static let usageInstructions = "mono_embedding_tool --out ~/OutputPath [--mono /Library/Frameworks/Mono.framework] [--blacklist Accessibility.dll,Commons.Xml.Relaxng.dll] [--compress]"
+	static let usageInstructions = "mono_embedding_tool --out ~/OutputPath [--mono /Library/Frameworks/Mono.framework] [--blacklist Accessibility.dll,System.Web.Mvc.dll] [--compress]"
 	static let defaultMonoPath = "/Library/Frameworks/Mono.framework"
 	
     static func run() -> Bool {
