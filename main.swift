@@ -3,7 +3,7 @@
 //  mono_embedding_tool
 //
 //  Created by Felix Deimel on 24.11.19.
-//  Copyright © 2019 Felix Deimel. All rights reserved.
+//  Copyright © 2020 Felix Deimel. All rights reserved.
 //
 
 import Foundation
@@ -188,8 +188,8 @@ class FileCollector {
         let libmonosgenPath = libPath.appendingPathComponent(path: "libmonosgen-2.0.dylib")
         collectedRelativePaths.append(libmonosgenPath)
         
-		let libintlPath = libPath.appendingPathComponent(path: "libintl.8.dylib")
-        collectedRelativePaths.append(libintlPath)
+		/* let libintlPath = libPath.appendingPathComponent(path: "libintl.8.dylib")
+        collectedRelativePaths.append(libintlPath) */
 		
         let libmononativecompatPath = libPath.appendingPathComponent(path: "libmono-native-compat.0.dylib")
         collectedRelativePaths.append(libmononativecompatPath)
@@ -485,7 +485,7 @@ class MonoCopier {
     <key>CFBundleVersion</key>
     <string>1</string>
     <key>NSHumanReadableCopyright</key>
-    <string>Copyright © 2019 Felix Deimel. All rights reserved.</string>
+    <string>Copyright © 2020 Felix Deimel. All rights reserved.</string>
 </dict>
 </plist>
 """
@@ -662,7 +662,7 @@ class MonoCopier {
             }
         }
 		
-		let libintlFilename = "libintl.8.dylib"
+		/* let libintlFilename = "libintl.8.dylib"
 		let libintlPath = libPath.appendingPathComponent(path: libintlFilename)
 		let libintlDestinationFilename = "libintl.dylib"
 		let libintlDestinationPath = libPath.appendingPathComponent(path: "mono").appendingPathComponent(path: "4.5").appendingPathComponent(path: libintlDestinationFilename)
@@ -688,7 +688,7 @@ class MonoCopier {
         
 		if !changeIDOfDylib(at: libintlDestinationPath, to: newLibintlDylibID) {
             return false
-        }
+        } */
 		
         let libmonosgenFilename = "libmonosgen-2.0.dylib"
         let libmonosgenPath = libPath.appendingPathComponent(path: libmonosgenFilename)
@@ -697,9 +697,9 @@ class MonoCopier {
             return false
         }
 		
-		if !changeDependencyOfDylib(at: libmonosgenPath, oldDependency: oldLibintlDylibID, newDependency: newLibintlDylibID) {
+		/* if !changeDependencyOfDylib(at: libmonosgenPath, oldDependency: oldLibintlDylibID, newDependency: newLibintlDylibID) {
 			return false
-		}
+		} */
         
         let libMonoPosixHelperFilename = "libMonoPosixHelper.dylib"
         let libMonoPosixHelperPath = libPath.appendingPathComponent(path: libMonoPosixHelperFilename)
@@ -708,9 +708,9 @@ class MonoCopier {
             return false
         }
 		
-		if !changeDependencyOfDylib(at: libMonoPosixHelperPath, oldDependency: oldLibintlDylibID, newDependency: newLibintlDylibID) {
+		/* if !changeDependencyOfDylib(at: libMonoPosixHelperPath, oldDependency: oldLibintlDylibID, newDependency: newLibintlDylibID) {
 			return false
-		}
+		} */
         
         let libMonoNativeCompatFilename = "libmono-native-compat.0.dylib"
         let libMonoNativeCompatPath = libPath.appendingPathComponent(path: libMonoNativeCompatFilename)
@@ -729,9 +729,9 @@ class MonoCopier {
             return false
         }
 		
-		if !changeDependencyOfDylib(at: libSystemNativePath, oldDependency: oldLibintlDylibID, newDependency: newLibintlDylibID) {
+		/* if !changeDependencyOfDylib(at: libSystemNativePath, oldDependency: oldLibintlDylibID, newDependency: newLibintlDylibID) {
 			return false
-		}
+		} */
         
         let outputVersionCurrentPath = self.outputPath.appendingPathComponent(path: "Versions").appendingPathComponent(path: "Current")
         let versionARelativePath = "A";
