@@ -732,6 +732,18 @@ class MonoCopier {
         let libSystemNativeFilename = "libSystem.Native.dylib"
         let libSystemNativePath = libPath.appendingPathComponent(path: "mono").appendingPathComponent(path: "4.5").appendingPathComponent(path: libSystemNativeFilename)
         
+		let libSystemNativeDirectoryPath = libSystemNativePath.deletingLastPathComponent()
+		
+		if !libSystemNativeDirectoryPath.directoryExists() {
+			do {
+				try fileManager.createDirectory(atPath: libSystemNativeDirectoryPath, withIntermediateDirectories: true, attributes: nil)
+			} catch {
+				ConsoleIO.printMessage("Failed to create directory at \(libSystemNativeDirectoryPath)", to: .error)
+				
+				return false
+			}
+		}
+		
         do {
             try fileManager.moveItem(atPath: libMonoNativeCompatPath, toPath: libSystemNativePath)
         } catch {
