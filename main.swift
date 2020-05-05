@@ -213,31 +213,46 @@ class FileCollector {
         let contents = try? fileManager.contentsOfDirectory(at: URL.init(fileURLWithPath: fullLibMono45Path),
                                                             includingPropertiesForKeys: nil,
                                                             options: enumOpts)
+		
+		let libMono45FacadesPath = "Facades"
+		let netstandardPath = libMono45FacadesPath.appendingPathComponent(path: "netstandard.dll")
+		
+		let customIncludes = [
+			netstandardPath.fileURLFromPath()
+		]
+		
+		for fileURL in customIncludes {
+			collect(fromURL: fileURL, relativePathRoot: libMono45Path, collection: &collectedRelativePaths)
+		}
         
         if let contents = contents {
             for fileURL in contents {
-                let fileExtension = fileURL.pathExtension
-                
-                if !fileExtension.hasSuffix("dll") {
-                    continue
-                }
-                
-                let fileName = fileURL.relativePath
-                
-                let isBlacklisted = isFileNameBlacklisted(fileName: fileName)
-                
-                if isBlacklisted {
-                    continue
-                }
-                
-                let relativeFilePath = libMono45Path.appendingPathComponent(path: fileName)
-                
-                collectedRelativePaths.append(relativeFilePath)
+                collect(fromURL: fileURL, relativePathRoot: libMono45Path, collection: &collectedRelativePaths)
             }
         }
         
         return collectedRelativePaths
     }
+	
+	func collect(fromURL fileURL: URL, relativePathRoot: String, collection: inout [String]) {
+		let fileExtension = fileURL.pathExtension
+		
+		if !fileExtension.hasSuffix("dll") {
+			return
+		}
+		
+		let fileName = fileURL.relativePath
+		
+		let isBlacklisted = isFileNameBlacklisted(fileName: fileName)
+		
+		if isBlacklisted {
+			return
+		}
+		
+		let relativeFilePath = relativePathRoot.appendingPathComponent(path: fileName)
+		
+		collection.append(relativeFilePath)
+	}
     
     func isFileNameBlacklisted(fileName: String) -> Bool {
         for blacklistedItem in self.blacklistedFilenames {
