@@ -210,26 +210,28 @@ class FileCollector {
                                                                  .skipsPackageDescendants,
                                                                  .skipsHiddenFiles]
         
-        let contents = try? fileManager.contentsOfDirectory(at: URL.init(fileURLWithPath: fullLibMono45Path),
+        let contents = try? fileManager.contentsOfDirectory(at: URL(fileURLWithPath: fullLibMono45Path),
                                                             includingPropertiesForKeys: nil,
                                                             options: enumOpts)
-		
-		let libMono45FacadesPath = "Facades"
-		let netstandardPath = libMono45FacadesPath.appendingPathComponent(path: "netstandard.dll")
-		
-		let customIncludes = [
-			netstandardPath.fileURLFromPath()
-		]
-		
-		for fileURL in customIncludes {
-			collect(fromURL: fileURL, relativePathRoot: libMono45Path, collection: &collectedRelativePaths)
-		}
         
         if let contents = contents {
             for fileURL in contents {
                 collect(fromURL: fileURL, relativePathRoot: libMono45Path, collection: &collectedRelativePaths)
             }
         }
+		
+		let libMono45FacadesPath = libMono45Path.appendingPathComponent(path: "Facades")
+		let fullLibMono45FacadesPath = self.systemMonoPath.appendingPathComponent(path: libMono45FacadesPath)
+		
+		let facadesContents = try? fileManager.contentsOfDirectory(at: URL(fileURLWithPath: fullLibMono45FacadesPath),
+																   includingPropertiesForKeys: nil,
+																   options: enumOpts)
+		
+		if let facadesContents = facadesContents {
+			for fileURL in facadesContents {
+				collect(fromURL: fileURL, relativePathRoot: libMono45FacadesPath, collection: &collectedRelativePaths)
+			}
+		}
         
         return collectedRelativePaths
     }
@@ -597,13 +599,16 @@ class MonoCopier {
                     symlinkDestinationPath = String(relativeFilePath[relativeFilePath.range(of: "/lib/")!.upperBound...])
                 }
                 
-                do {
-                    try fileManager.createSymbolicLink(atPath: symlinkPath, withDestinationPath: symlinkDestinationPath)
-                } catch {
-                    ConsoleIO.printMessage("Failed create symlink for \(relativeFilePath) at \(symlinkPath)", to: .error)
-                    
-                    return false
-                }
+				// Exclude Facades from symlinking
+				if !relativeFilePath.contains(string: "/Facades/") {
+					do {
+						try fileManager.createSymbolicLink(atPath: symlinkPath, withDestinationPath: symlinkDestinationPath)
+					} catch {
+						ConsoleIO.printMessage("Failed to create symlink for \(relativeFilePath) at \(symlinkPath)", to: .error)
+						
+						return false
+					}
+				}
             }
             
             let absoluteDestinationPath = outputVersionAPath.appendingPathComponent(path: relativeFilePath)
