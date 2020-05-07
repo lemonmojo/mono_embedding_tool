@@ -15,9 +15,19 @@ extension String {
         return nsStr.lastPathComponent
     }
     
-    func appendingPathComponent(path: String) -> String {
+    func appendingPathComponent(_ path: String) -> String {
         let nsStr = self as NSString
         return nsStr.appendingPathComponent(path)
+    }
+    
+    func appendingPathExtension(_ ext: String) -> String? {
+        let nsStr = self as NSString
+        return nsStr.appendingPathExtension(ext)
+    }
+    
+    func deletingPathExtension() -> String {
+        let nsStr = self as NSString
+        return nsStr.deletingPathExtension
     }
     
     func expandingTildeInPath() -> String {
@@ -38,6 +48,11 @@ extension String {
     func deletingLastPathComponent() -> String {
         let nsStr = self as NSString
         return nsStr.deletingLastPathComponent
+    }
+    
+    func pathExtension() -> String {
+        let nsStr = self as NSString
+        return nsStr.pathExtension
     }
 	
 	func replacingFirstOccurrence(of target: String, with replacementString: String) -> String {
@@ -185,23 +200,23 @@ class FileCollector {
         
         let libPath = "/lib"
         
-        let libmonosgenPath = libPath.appendingPathComponent(path: "libmonosgen-2.0.dylib")
+        let libmonosgenPath = libPath.appendingPathComponent("libmonosgen-2.0.1.dylib")
         collectedRelativePaths.append(libmonosgenPath)
         
 		/* let libintlPath = libPath.appendingPathComponent(path: "libintl.8.dylib")
         collectedRelativePaths.append(libintlPath) */
 		
-        let libmononativecompatPath = libPath.appendingPathComponent(path: "libmono-native-compat.0.dylib")
+        let libmononativecompatPath = libPath.appendingPathComponent("libmono-native-compat.0.dylib")
         collectedRelativePaths.append(libmononativecompatPath)
         
-        let libMonoPosixHelperPath = libPath.appendingPathComponent(path: "libMonoPosixHelper.dylib")
+        let libMonoPosixHelperPath = libPath.appendingPathComponent("libMonoPosixHelper.dylib")
         collectedRelativePaths.append(libMonoPosixHelperPath)
         
-        let libMonoPath = libPath.appendingPathComponent(path: "/mono")
+        let libMonoPath = libPath.appendingPathComponent("/mono")
         //let fullLibMonoPath = self.systemMonoPath.appendingPathComponent(path: libMonoPath)
         
-        let libMono45Path = libMonoPath.appendingPathComponent(path: "4.5")
-        let fullLibMono45Path = self.systemMonoPath.appendingPathComponent(path: libMono45Path)
+        let libMono45Path = libMonoPath.appendingPathComponent("4.5")
+        let fullLibMono45Path = self.systemMonoPath.appendingPathComponent(libMono45Path)
         
         let fileManager = FileManager.default
         
@@ -220,8 +235,8 @@ class FileCollector {
             }
         }
 		
-		let libMono45FacadesPath = libMono45Path.appendingPathComponent(path: "Facades")
-		let fullLibMono45FacadesPath = self.systemMonoPath.appendingPathComponent(path: libMono45FacadesPath)
+		let libMono45FacadesPath = libMono45Path.appendingPathComponent("Facades")
+		let fullLibMono45FacadesPath = self.systemMonoPath.appendingPathComponent(libMono45FacadesPath)
 		
 		let facadesContents = try? fileManager.contentsOfDirectory(at: URL(fileURLWithPath: fullLibMono45FacadesPath),
 																   includingPropertiesForKeys: nil,
@@ -251,7 +266,7 @@ class FileCollector {
 			return
 		}
 		
-		let relativeFilePath = relativePathRoot.appendingPathComponent(path: fileName)
+        let relativeFilePath = relativePathRoot.appendingPathComponent(fileName)
 		
 		collection.append(relativeFilePath)
 	}
@@ -401,7 +416,7 @@ $$$$METADATAS$$$$
     
     NSString* bundlePath = bundle.bundlePath;
     
-    NSString* libPath = [[bundlePath stringByAppendingPathComponent:@"/Versions/Current/lib"] stringByResolvingSymlinksInPath];
+    NSString* libPath = [[bundlePath stringByAppendingPathComponent:@"/Versions/A/lib"] stringByResolvingSymlinksInPath];
     NSString* binFileName = @"Assemblies.bin";
     
     NSString* binFilePath = [libPath stringByAppendingPathComponent:binFileName];
@@ -484,7 +499,7 @@ class MonoCopier {
 <plist version="1.0">
 <dict>
     <key>CFBundleExecutable</key>
-    <string>Versions/Current/lib/libmonosgen-2.0.dylib</string>
+    <string>Versions/A/lib/libmonosgen-2.0.1.dylib</string>
     <key>CFBundleIdentifier</key>
     <string>com.lemonmojo.Mono</string>
     <key>CFBundleInfoDictionaryVersion</key>
@@ -535,7 +550,7 @@ class MonoCopier {
             return false
         }
         
-        let outputVersionAPath = self.outputPath.appendingPathComponent(path: "Versions").appendingPathComponent(path: "A")
+        let outputVersionAPath = self.outputPath.appendingPathComponent("Versions").appendingPathComponent("A")
         
         do {
             try fileManager.createDirectory(atPath: outputVersionAPath, withIntermediateDirectories: true, attributes: nil)
@@ -545,7 +560,7 @@ class MonoCopier {
             return false
         }
         
-        let outputVersionAHeadersPath = outputVersionAPath.appendingPathComponent(path: "Headers")
+        let outputVersionAHeadersPath = outputVersionAPath.appendingPathComponent("Headers")
         
         do {
             try fileManager.createDirectory(atPath: outputVersionAHeadersPath, withIntermediateDirectories: true, attributes: nil)
@@ -555,7 +570,7 @@ class MonoCopier {
             return false
         }
         
-        let outputVersionAResourcesPath = outputVersionAPath.appendingPathComponent(path: "Resources")
+        let outputVersionAResourcesPath = outputVersionAPath.appendingPathComponent("Resources")
         
         do {
             try fileManager.createDirectory(atPath: outputVersionAResourcesPath, withIntermediateDirectories: true, attributes: nil)
@@ -565,7 +580,7 @@ class MonoCopier {
             return false
         }
         
-        let infoPlistPath = outputVersionAResourcesPath.appendingPathComponent(path: "Info.plist")
+        let infoPlistPath = outputVersionAResourcesPath.appendingPathComponent("Info.plist")
         
         do {
             try self.infoPlistContent.write(toFile: infoPlistPath, atomically: true, encoding: .utf8)
@@ -575,14 +590,14 @@ class MonoCopier {
             return false
         }
         
-        let libPath = outputVersionAPath.appendingPathComponent(path: "lib")
+        let libPath = outputVersionAPath.appendingPathComponent("lib")
         
         var compressedMetaDatas = [CompressedMetaData]()
         var compressedDataOffset = 0
         var compressedDataBlock = Data()
         
         for relativeFilePath in self.relativeFilePathsToCopy {
-            let absoluteFilePath = self.systemMonoPath.appendingPathComponent(path: relativeFilePath)
+            let absoluteFilePath = self.systemMonoPath.appendingPathComponent(relativeFilePath)
             let resolvedAbsoluteFilePath = absoluteFilePath.resolvingSylinksInPath()
             
             ConsoleIO.printMessage("Copying \(resolvedAbsoluteFilePath)...")
@@ -591,7 +606,7 @@ class MonoCopier {
             
             if !compress && isDLLFile { // Put symlinks for all DLLs into lib root folder
                 let dllFileName = relativeFilePath.lastPathComponent()
-                let symlinkPath = libPath.appendingPathComponent(path: dllFileName)
+                let symlinkPath = libPath.appendingPathComponent(dllFileName)
                 
                 var symlinkDestinationPath = relativeFilePath
                 
@@ -611,7 +626,7 @@ class MonoCopier {
 				}
             }
             
-            let absoluteDestinationPath = outputVersionAPath.appendingPathComponent(path: relativeFilePath)
+            let absoluteDestinationPath = outputVersionAPath.appendingPathComponent(relativeFilePath)
             let absoluteDestinationDirectoryPath = absoluteDestinationPath.deletingLastPathComponent()
             
             if !absoluteDestinationDirectoryPath.directoryExists() {
@@ -666,10 +681,10 @@ class MonoCopier {
         
         if compress && compressedDataBlock.count > 0 {
             let compressedAssembliesFileName = "Assemblies.bin"
-            let compressedAssembliesDestinationPath = libPath.appendingPathComponent(path: compressedAssembliesFileName)
+            let compressedAssembliesDestinationPath = libPath.appendingPathComponent(compressedAssembliesFileName)
             
             let compressedAssembliesHeaderFileName = "Mono.h"
-            let compressedAssembliesHeaderDestinationPath = outputVersionAHeadersPath.appendingPathComponent(path: compressedAssembliesHeaderFileName)
+            let compressedAssembliesHeaderDestinationPath = outputVersionAHeadersPath.appendingPathComponent(compressedAssembliesHeaderFileName)
             
             let headerContent = MonoAssemblyDecompressionUtils.headerContent(metaDatas: compressedMetaDatas)
             
@@ -710,10 +725,21 @@ class MonoCopier {
             return false
         } */
 		
-        let libmonosgenFilename = "libmonosgen-2.0.dylib"
-        let libmonosgenPath = libPath.appendingPathComponent(path: libmonosgenFilename)
+        let libmonosgenFilename = "libmonosgen-2.0.1.dylib"
+        let libmonosgenPath = libPath.appendingPathComponent(libmonosgenFilename)
         
         if !changeIDOfDylib(at: libmonosgenPath, to: newDylibID(for: libmonosgenFilename)) {
+            return false
+        }
+        
+        let libmonosgen20Filename = "libmonosgen-2.0.dylib"
+        let libmonosgen20Path = libPath.appendingPathComponent(libmonosgen20Filename)
+        
+        do {
+            try fileManager.createSymbolicLink(atPath: libmonosgen20Path, withDestinationPath: libmonosgenFilename)
+        } catch {
+            ConsoleIO.printMessage("Failed create symlink for \(libmonosgenFilename) at \(libmonosgen20Path)", to: .error)
+            
             return false
         }
 		
@@ -722,7 +748,7 @@ class MonoCopier {
 		} */
         
         let libMonoPosixHelperFilename = "libMonoPosixHelper.dylib"
-        let libMonoPosixHelperPath = libPath.appendingPathComponent(path: libMonoPosixHelperFilename)
+        let libMonoPosixHelperPath = libPath.appendingPathComponent(libMonoPosixHelperFilename)
         
         if !changeIDOfDylib(at: libMonoPosixHelperPath, to: newDylibID(for: libMonoPosixHelperFilename)) {
             return false
@@ -733,9 +759,9 @@ class MonoCopier {
 		} */
         
         let libMonoNativeCompatFilename = "libmono-native-compat.0.dylib"
-        let libMonoNativeCompatPath = libPath.appendingPathComponent(path: libMonoNativeCompatFilename)
+        let libMonoNativeCompatPath = libPath.appendingPathComponent(libMonoNativeCompatFilename)
         let libSystemNativeFilename = "libSystem.Native.dylib"
-        let libSystemNativePath = libPath.appendingPathComponent(path: "mono").appendingPathComponent(path: "4.5").appendingPathComponent(path: libSystemNativeFilename)
+        let libSystemNativePath = libPath.appendingPathComponent("mono").appendingPathComponent("4.5").appendingPathComponent(libSystemNativeFilename)
         
 		let libSystemNativeDirectoryPath = libSystemNativePath.deletingLastPathComponent()
 		
@@ -757,7 +783,7 @@ class MonoCopier {
             return false
         }
         
-        if !changeIDOfDylib(at: libSystemNativePath, to: newDylibID(for: "mono".appendingPathComponent(path: "4.5").appendingPathComponent(path: libSystemNativeFilename))) {
+        if !changeIDOfDylib(at: libSystemNativePath, to: newDylibID(for: "mono".appendingPathComponent("4.5").appendingPathComponent(libSystemNativeFilename))) {
             return false
         }
 		
@@ -765,7 +791,7 @@ class MonoCopier {
 			return false
 		} */
         
-        let outputVersionCurrentPath = self.outputPath.appendingPathComponent(path: "Versions").appendingPathComponent(path: "Current")
+        let outputVersionCurrentPath = self.outputPath.appendingPathComponent("Versions").appendingPathComponent("Current")
         let versionARelativePath = "A";
         
         do {
@@ -776,7 +802,7 @@ class MonoCopier {
             return false
         }
         
-        let outputHeadersPath = self.outputPath.appendingPathComponent(path: "Headers")
+        let outputHeadersPath = self.outputPath.appendingPathComponent("Headers")
         let versionsCurrentHeadersRelativePath = "Versions/Current/Headers"
         
         do {
@@ -787,7 +813,7 @@ class MonoCopier {
             return false
         }
         
-        let outputResourcesPath = self.outputPath.appendingPathComponent(path: "Resources")
+        let outputResourcesPath = self.outputPath.appendingPathComponent("Resources")
         let versionsCurrentResourcesRelativePath = "Versions/Current/Resources"
         
         do {
@@ -798,8 +824,8 @@ class MonoCopier {
             return false
         }
         
-        let mainFrameworkSymlinkInVersionAPath = outputVersionAPath.appendingPathComponent(path: "Mono")
-        let libmonosgenInLibPath = "lib".appendingPathComponent(path: libmonosgenFilename)
+        let mainFrameworkSymlinkInVersionAPath = outputVersionAPath.appendingPathComponent("Mono")
+        let libmonosgenInLibPath = "lib".appendingPathComponent(libmonosgenFilename)
         
         do {
             try fileManager.createSymbolicLink(atPath: mainFrameworkSymlinkInVersionAPath, withDestinationPath: libmonosgenInLibPath)
@@ -809,8 +835,8 @@ class MonoCopier {
             return false
         }
         
-        let mainFrameworkBinarySymlinkPath = self.outputPath.appendingPathComponent(path: "Mono")
-        let libmonosgenInCurrentVersionPath = "Versions".appendingPathComponent(path: "Current").appendingPathComponent(path: "Mono")
+        let mainFrameworkBinarySymlinkPath = self.outputPath.appendingPathComponent("Mono")
+        let libmonosgenInCurrentVersionPath = "Versions".appendingPathComponent("Current").appendingPathComponent("Mono")
         
         do {
             try fileManager.createSymbolicLink(atPath: mainFrameworkBinarySymlinkPath, withDestinationPath: libmonosgenInCurrentVersionPath)
@@ -926,7 +952,7 @@ class MonoCopier {
     }
     
 	func newDylibID(for fileName: String) -> String {
-        return "@rpath/Mono.framework/Versions/Current/lib/\(fileName)"
+        return "@rpath/Mono.framework/Versions/A/lib/\(fileName)"
     }
 	
 	func idOfDylib(at filePath: String) -> String? {
@@ -1070,12 +1096,12 @@ class Main {
         if let options = CommandLineOptions(arguments: CommandLine.arguments) {
 			let monoPath = (options.monoPath.isEmpty ? defaultMonoPath : options.monoPath)
 				.expandingTildeInPath()
-				.appendingPathComponent(path: "Versions")
-				.appendingPathComponent(path: "Current")
+                .appendingPathComponent("Versions")
+                .appendingPathComponent("Current")
 			
             let outputPath = options.outputPath
 				.expandingTildeInPath()
-				.appendingPathComponent(path: "Mono.framework")
+                .appendingPathComponent("Mono.framework")
 			
             let compress = options.compress
             let blacklist = options.blacklist
