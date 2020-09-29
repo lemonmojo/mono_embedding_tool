@@ -247,7 +247,7 @@ class FileCollector {
 				collect(fromURL: fileURL, relativePathRoot: libMono45FacadesPath, collection: &collectedRelativePaths)
 			}
 		}
-        
+		
         return collectedRelativePaths
     }
 	
@@ -521,6 +521,57 @@ class MonoCopier {
 </dict>
 </plist>
 """
+	
+	let umbrellaHeaderContent = """
+#import <mono/jit/jit.h>
+
+#import <mono/metadata/appdomain.h>
+#import <mono/metadata/assembly.h>
+#import <mono/metadata/attrdefs.h>
+#import <mono/metadata/blob.h>
+#import <mono/metadata/class.h>
+#import <mono/metadata/debug-helpers.h>
+//#import "mono/metadata/debug-mono-symfile.h"
+#import <mono/metadata/environment.h>
+#import <mono/metadata/exception.h>
+#import <mono/metadata/image.h>
+#import <mono/metadata/loader.h>
+#import <mono/metadata/metadata.h>
+#import <mono/metadata/mono-config.h>
+#import <mono/metadata/mono-debug.h>
+#import <mono/metadata/mono-gc.h>
+#import <mono/metadata/object-forward.h>
+#import <mono/metadata/object.h>
+//#import <mono/metadata/opcodes.h>
+//#import "mono/metadata/profiler-events.h"
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdocumentation-deprecated-sync"
+#import <mono/metadata/profiler.h>
+#pragma clang diagnostic pop
+#import <mono/metadata/reflection.h>
+#import <mono/metadata/row-indexes.h>
+#import <mono/metadata/sgen-bridge.h>
+#import <mono/metadata/threads.h>
+#import <mono/metadata/tokentype.h>
+//#import "mono/metadata/verify.h"
+
+#import <mono/utils/mono-counters.h>
+#import <mono/utils/mono-dl-fallback.h>
+#import <mono/utils/mono-error.h>
+#import <mono/utils/mono-forward.h>
+#import <mono/utils/mono-jemalloc.h>
+#import <mono/utils/mono-logger.h>
+#import <mono/utils/mono-publib.h>
+"""
+	
+	let moduleMapContent = """
+framework module Mono {
+	umbrella header "Mono.h"
+
+	export *
+	module * { export * }
+}
+"""
     
     init(systemMonoPath: String, relativeFilePathsToCopy: [String], outputPath: String, compress: Bool) {
         self.systemMonoPath = systemMonoPath
@@ -579,6 +630,16 @@ class MonoCopier {
             
             return false
         }
+		
+		let outputVersionAModulesPath = outputVersionAPath.appendingPathComponent("Modules")
+		
+		do {
+			try fileManager.createDirectory(atPath: outputVersionAModulesPath, withIntermediateDirectories: true, attributes: nil)
+		} catch {
+			ConsoleIO.printMessage("Failed to create Versions/A/Modules directory", to: .error)
+			
+			return false
+		}
         
         let infoPlistPath = outputVersionAResourcesPath.appendingPathComponent("Info.plist")
         
@@ -589,6 +650,84 @@ class MonoCopier {
             
             return false
         }
+		
+		
+		
+		
+		
+		let sourceHeadersPath = self.systemMonoPath.appendingPathComponent("include/mono-2.0").resolvingSylinksInPath()
+				
+		let enumOpts: FileManager.DirectoryEnumerationOptions = [.producesRelativePathURLs,
+																 .skipsPackageDescendants,
+																 .skipsHiddenFiles]
+
+		let headersEnumerator = fileManager.enumerator(at: URL(fileURLWithPath: sourceHeadersPath), includingPropertiesForKeys: nil, options: enumOpts, errorHandler: nil)
+
+		if let headersContents = headersEnumerator {
+			for case let fileURL as URL in headersContents {
+				let fileExtension = fileURL.pathExtension
+					
+				if !fileExtension.hasSuffix("h") {
+					continue
+				}
+				
+				let sourcePath = fileURL.path
+				let fileName = fileURL.lastPathComponent
+				
+				if fileName == "debug-mono-symfile.h" ||
+					fileName == "opcodes.h" ||
+					fileName == "verify.h" {
+					continue
+				}
+				
+				let relativeDestinationPath = fileURL.path.replacingFirstOccurrence(of: sourceHeadersPath, with: "")
+				let fullDestinationPath = outputVersionAHeadersPath.appendingPathComponent(relativeDestinationPath)
+				let fullDestinationDirectoryPath = fullDestinationPath.deletingLastPathComponent()
+				
+				do {
+					if !fullDestinationDirectoryPath.directoryExists() {
+						do {
+							try fileManager.createDirectory(atPath: fullDestinationDirectoryPath, withIntermediateDirectories: true, attributes: nil)
+						} catch {
+							ConsoleIO.printMessage("Failed to create directory at \(fullDestinationDirectoryPath)", to: .error)
+							
+							return false
+						}
+					}
+					
+					try fileManager.copyItem(atPath: sourcePath, toPath: fullDestinationPath)
+				} catch {
+					ConsoleIO.printMessage("Failed to copy file from \(sourcePath)", to: .error)
+					
+					return false
+				}
+			}
+		}
+		
+		let umbrellaHeaderPath = outputVersionAHeadersPath.appendingPathComponent("Mono.h")
+		
+		do {
+			try self.umbrellaHeaderContent.write(toFile: umbrellaHeaderPath, atomically: true, encoding: .utf8)
+		} catch {
+			ConsoleIO.printMessage("Failed to create Mono.h in Headers directory", to: .error)
+			
+			return false
+		}
+		
+		let moduleMapPath = outputVersionAModulesPath.appendingPathComponent("module.modulemap")
+		
+		do {
+			try self.moduleMapContent.write(toFile: moduleMapPath, atomically: true, encoding: .utf8)
+		} catch {
+			ConsoleIO.printMessage("Failed to create module.modulemap in Modules directory", to: .error)
+			
+			return false
+		}
+		
+		
+		
+		
+		
         
         let libPath = outputVersionAPath.appendingPathComponent("lib")
         
@@ -666,7 +805,7 @@ class MonoCopier {
                 do {
                     try fileManager.copyItem(atPath: resolvedAbsoluteFilePath, toPath: absoluteDestinationPath)
                 } catch {
-                    ConsoleIO.printMessage("Failed to create copy file from \(resolvedAbsoluteFilePath)", to: .error)
+                    ConsoleIO.printMessage("Failed to copy file from \(resolvedAbsoluteFilePath)", to: .error)
                     
                     return false
                 }
@@ -696,6 +835,8 @@ class MonoCopier {
                 return false
             }
         }
+		
+		
 		
 		/* let libintlFilename = "libintl.8.dylib"
 		let libintlPath = libPath.appendingPathComponent(path: libintlFilename)
@@ -823,7 +964,18 @@ class MonoCopier {
             
             return false
         }
-        
+		
+		let outputModulesPath = self.outputPath.appendingPathComponent("Modules")
+		let versionsCurrentModulesRelativePath = "Versions/Current/Modules"
+		
+		do {
+			try fileManager.createSymbolicLink(atPath: outputModulesPath, withDestinationPath: versionsCurrentModulesRelativePath)
+		} catch {
+			ConsoleIO.printMessage("Failed create symlink for \(versionsCurrentModulesRelativePath) at \(outputModulesPath)", to: .error)
+			
+			return false
+		}
+		
         let mainFrameworkSymlinkInVersionAPath = outputVersionAPath.appendingPathComponent("Mono")
         let libmonosgenInLibPath = "lib".appendingPathComponent(libmonosgenFilename)
         
